@@ -27,16 +27,19 @@ jobs:
 
       - name: Bake latest readings into OpenGraph tags
         run: |
-          curl -sf https://api-open.data.gov.sg/v2/real-time/api/psi -o psi.json
+          # The trailing path segment is only a cache-buster; any value returns the latest data.
+          curl -sf "https://www.haze.gov.sg/api/airquality/jsondata/$(date +%s)" -o haze.json
 
-          # e.g. "PM2.5 n54 s62🔴 e62🔴 w93🔴 c92🔴 ug/m3"; some previewers (Teams) show only the title.
-          # 🔴 marks 56 and above (NEA "Elevated" band or worse). Keep in sync with index.html.
+          # Latest 1-hr PM2.5 (µg/m³) per region, e.g. "PM2.5 n80🔴 s130🔴 e119🔴 w158🔴 c139🔴 ug/m3".
+          # Some previewers (Teams) show only the title.
+          # 🔴 marks 56 and above (NEA band II or worse). Keep in sync with index.html.
           summary=$(jq -r '
-            .data.items[0].readings as $r
-            | ($r.pm25_one_hourly // $r.pm25_twenty_four_hourly) as $pm
-            | "PM2.5 \(["north", "south", "east", "west", "central"]
-                | map("\(.[:1])\($pm[.])\(if ($pm[.] // 0) >= 56 then "🔴" else "" end)") | join(" ")) ug/m3"
-          ' psi.json)
+            .Chart1HRPM25 as $pm
+            | "PM2.5 \(["North", "South", "East", "West", "Central"]
+                | map(($pm[.].Data[-1].value // null | if . then round else . end) as $v
+                      | "\(.[:1] | ascii_downcase)\($v // "?")\(if ($v // 0) >= 56 then "🔴" else "" end)")
+                | join(" ")) ug/m3"
+          ' haze.json)
           echo "TITLE=$summary" >> "$GITHUB_ENV"
           echo "DESCRIPTION=$summary" >> "$GITHUB_ENV"
 

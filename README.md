@@ -3,24 +3,19 @@
 A single-page site showing Singapore's latest PM2.5 readings by region, built so that link previews (WhatsApp, Teams, Slack, Telegram) show the numbers too.
 
 ```
-PM2.5 n80🔴 s130🔴 e119🔴 w158🔴 c139🔴 ug/m3
+PM2.5 n80🔴 s130🔴 e119🔴 w158🔴 c139🔴 µg/m³
 ```
 
 Values are the latest 1-hr PM2.5 concentration (µg/m³) for north, south, east, west and central. 🔴 marks readings of 56 and above (NEA band II or worse).
 
-Data sources, both published by NEA:
-
-- **Link preview:** `Chart1HRPM25` from haze.gov.sg (`https://www.haze.gov.sg/api/airquality/jsondata/<timestamp>`), last item of each region's `Data[]`. The trailing number is only a cache-buster.
-- **Page table:** data.gov.sg's [PSI real-time API](https://data.gov.sg/datasets/d_fe37906a0182569d891506e815e819b7/view) (`https://api-open.data.gov.sg/v2/real-time/api/psi`).
+Data source: `https://www.haze.gov.sg/` (NEA). Both the page and the link preview read `Chart1HRPM25` from `https://www.haze.gov.sg/api/airquality/jsondata/<timestamp>`, taking the last item of each region's `Data[]`. The trailing number is only a cache-buster.
 
 ## How it works
 
 Link-preview crawlers don't run JavaScript, so the preview text has to be in the HTML they download.
 
-- **`index.html`** is the whole site. In a browser, its script fetches the API directly and renders a table of PM2.5 (with NEA band) and 24-hr PSI (with band) per region, refreshing every 5 minutes.
+- **`index.html`** is the whole site. In a browser, its script fetches the API directly and renders a table of 1-hr PM2.5 and its NEA band per region, refreshing every 5 minutes.
 - **`.github/workflows/update.yml`** runs every 30 minutes, on every push to `main`, and on manual runs. It fetches haze.gov.sg, writes the summary line into the `<title>`, `og:*`, `twitter:*` and `description` tags of `index.html`, and deploys the result to GitHub Pages. Nothing is committed back to the repo.
-
-data.gov.sg doesn't always publish `pm25_one_hourly`; when it's missing, the page table uses `pm25_twenty_four_hourly`, so it can differ from the preview.
 
 ## Setup
 
@@ -49,6 +44,6 @@ summary=$(curl -sf "https://www.haze.gov.sg/api/airquality/jsondata/$(date +%s)"
   | "PM2.5 \(["North", "South", "East", "West", "Central"]
       | map(($pm[.].Data[-1].value // null | if . then round else . end) as $v
             | "\(.[:1] | ascii_downcase)\($v // "?")\(if ($v // 0) >= 56 then "🔴" else "" end)")
-      | join(" ")) ug/m3"')
+      | join(" ")) µg/m³"')
 TITLE=$summary perl -ne 'print if s/(<meta property="og:title" content=")[^"]*/$1$ENV{TITLE}/' index.html
 ```

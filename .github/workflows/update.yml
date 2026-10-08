@@ -30,7 +30,7 @@ jobs:
           # The trailing path segment is only a cache-buster; any value returns the latest data.
           curl -sf "https://www.haze.gov.sg/api/airquality/jsondata/$(date +%s)" -o haze.json
 
-          # Latest 1-hr PM2.5 (µg/m³) per region, e.g. "PM2.5 n80🔴 s130🔴 e119🔴 w158🔴 c139🔴 ug/m3".
+          # Latest 1-hr PM2.5 (µg/m³) per region, e.g. "PM2.5 n80🔴 s130🔴 e119🔴 w158🔴 c139🔴 µg/m³".
           # Some previewers (Teams) show only the title.
           # 🔴 marks 56 and above (NEA band II or worse). Keep in sync with index.html.
           summary=$(jq -r '
@@ -38,10 +38,11 @@ jobs:
             | "PM2.5 \(["North", "South", "East", "West", "Central"]
                 | map(($pm[.].Data[-1].value // null | if . then round else . end) as $v
                       | "\(.[:1] | ascii_downcase)\($v // "?")\(if ($v // 0) >= 56 then "🔴" else "" end)")
-                | join(" ")) ug/m3"
+                | join(" ")) µg/m³"
           ' haze.json)
           echo "TITLE=$summary" >> "$GITHUB_ENV"
-          echo "DESCRIPTION=$summary" >> "$GITHUB_ENV"
+          # e.g. "As of 10pm on 8 Oct 2026"
+          echo "DESCRIPTION=As of $(jq -r '.ChartAsOfDate' haze.json)" >> "$GITHUB_ENV"
 
       - name: Write tags
         run: |
@@ -51,7 +52,7 @@ jobs:
             s/(<meta (?:property|name)="(?:og:|twitter:)title" content=")[^"]*/$1$ENV{TITLE}/;
             s/(<meta (?:property|name)="(?:og:|twitter:)?description" content=")[^"]*/$1$ENV{DESCRIPTION}/;
           ' index.html > _site/index.html
-          grep -E '<title>|og:(title|description)' _site/index.html
+          grep -E '<title>|og:title|description' _site/index.html
 
       - uses: actions/upload-pages-artifact@v5
 

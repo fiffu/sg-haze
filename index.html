@@ -37,31 +37,23 @@
     <p id="status">Loading…</p>
     <table hidden>
       <thead>
-        <tr><th>Region</th><th class="num" id="pm25-label">PM2.5</th><th></th><th class="num">PSI 24-hr</th><th></th></tr>
+        <tr><th>Region</th><th class="num">PM2.5 1-hr (µg/m³)</th><th>Band</th></tr>
       </thead>
       <tbody id="rows"></tbody>
     </table>
   </main>
   <script>
-    const API_URL = "https://api-open.data.gov.sg/v2/real-time/api/psi";
-    const REGIONS = ["north", "south", "east", "west", "central"];
+    // The trailing path segment is only a cache-buster; any value returns the latest data.
+    const API_URL = "https://www.haze.gov.sg/api/airquality/jsondata/";
+    const REGIONS = ["North", "South", "East", "West", "Central"];
 
-    // NEA 24-hr PM2.5 bands (µg/m³). 🔴 marks 56 and above; keep in sync with update.yml.
+    // NEA 1-hr PM2.5 bands (µg/m³). 🔴 marks 56 and above; keep in sync with update.yml.
     function pm25Band(v) {
       if (v == null) return "n/a";
-      if (v <= 55) return "Normal";
-      if (v <= 150) return "Elevated";
-      if (v <= 250) return "High";
-      return "Very high";
-    }
-
-    function psiBand(v) {
-      if (v == null) return "n/a";
-      if (v <= 50) return "Good";
-      if (v <= 100) return "Moderate";
-      if (v <= 200) return "Unhealthy";
-      if (v <= 300) return "Very unhealthy";
-      return "Hazardous";
+      if (v <= 55) return "I (Normal)";
+      if (v <= 150) return "II (Elevated)";
+      if (v <= 250) return "III (High)";
+      return "IV (Very high)";
     }
 
     function cell(text, className) {
@@ -74,35 +66,26 @@
     async function load() {
       const status = document.getElementById("status");
       try {
-        const response = await fetch(API_URL);
+        const response = await fetch(API_URL + Math.floor(Date.now() / 1000));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const body = await response.json();
-        if (body.code !== 0) throw new Error(body.errorMsg || `HTTP ${response.status}`);
 
-        const item = body.data.items[0];
-        const readings = item.readings;
-        // pm25_one_hourly is not always published; fall back to the 24-hr average.
-        const pm25 = readings.pm25_one_hourly || readings.pm25_twenty_four_hourly;
-        const psi = readings.psi_twenty_four_hourly || {};
-
-        document.getElementById("pm25-label").textContent =
-          `PM2.5 ${readings.pm25_one_hourly ? "1-hr" : "24-hr"}`;
         document.getElementById("rows").replaceChildren(...REGIONS.map((name) => {
+          const raw = body.Chart1HRPM25?.[name]?.Data?.at(-1)?.value;
+          const value = raw == null ? null : Math.round(raw);
           const tr = document.createElement("tr");
           tr.append(
-            cell(name.charAt(0).toUpperCase() + name.slice(1)),
-            cell(pm25[name] >= 56 ? `🔴 ${pm25[name]}` : pm25[name], "num"), cell(pm25Band(pm25[name])),
-            cell(psi[name], "num"), cell(psiBand(psi[name])),
+            cell(name),
+            cell(value >= 56 ? `🔴 ${value}` : value, "num"),
+            cell(pm25Band(value)),
           );
           return tr;
         }));
         document.querySelector("table").hidden = false;
 
-        const time = new Date(item.updatedTimestamp).toLocaleString("en-SG", {
-          timeZone: "Asia/Singapore", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
-        });
-        status.textContent = `Updated ${time} · source: data.gov.sg (NEA)`;
+        status.textContent = `As of ${body.ChartAsOfDate} · source: https://www.haze.gov.sg/`;
       } catch (error) {
-        status.textContent = `Could not load PSI data: ${error.message}`;
+        status.textContent = `Could not load PM2.5 data: ${error.message}`;
       }
     }
 

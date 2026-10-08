@@ -28,21 +28,17 @@ jobs:
       - name: Bake latest readings into OpenGraph tags
         run: |
           curl -sf https://api-open.data.gov.sg/v2/real-time/api/psi -o psi.json
-          updated=$(jq -r '.data.items[0].updatedTimestamp' psi.json)
-          time=$(TZ=Asia/Singapore date -d "$updated" '+%-d %b, %-I:%M %p')
 
-          # NEA 24-hr PM2.5 bands (µg/m³). Keep in sync with index.html.
-          jq -r --arg time "$time" '
-            def band: if . == null then "n/a" elif . <= 55 then "Normal" elif . <= 150 then "Elevated"
-                      elif . <= 250 then "High" else "Very high" end;
+          # e.g. "PM2.5 n54 s62🔴 e62🔴 w93🔴 c92🔴 ug/m3"; some previewers (Teams) show only the title.
+          # 🔴 marks 56 and above (NEA "Elevated" band or worse). Keep in sync with index.html.
+          summary=$(jq -r '
             .data.items[0].readings as $r
             | ($r.pm25_one_hourly // $r.pm25_twenty_four_hourly) as $pm
-            | (if $r.pm25_one_hourly then "1-hr" else "24-hr" end) as $label
-            | ["north", "south", "east", "west", "central"] as $regions
-            | ($regions | map($pm[.]) | max) as $worst
-            | "TITLE=SG PM2.5 \($worst) (\($worst | band)) · \($time)",
-              "DESCRIPTION=\($regions | map("\(.[:1] | ascii_upcase)\(.[1:]) \($pm[.])") | join(" · ")) µg/m³ (\($label)). PSI 24-hr up to \($regions | map($r.psi_twenty_four_hourly[.]) | max)."
-          ' psi.json >> "$GITHUB_ENV"
+            | "PM2.5 \(["north", "south", "east", "west", "central"]
+                | map("\(.[:1])\($pm[.])\(if ($pm[.] // 0) >= 56 then "🔴" else "" end)") | join(" ")) ug/m3"
+          ' psi.json)
+          echo "TITLE=$summary" >> "$GITHUB_ENV"
+          echo "DESCRIPTION=$summary" >> "$GITHUB_ENV"
 
       - name: Write tags
         run: |

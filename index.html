@@ -46,7 +46,7 @@
     const API_URL = "https://api-open.data.gov.sg/v2/real-time/api/psi";
     const REGIONS = ["north", "south", "east", "west", "central"];
 
-    // NEA 24-hr PM2.5 bands (µg/m³). Keep in sync with update.yml.
+    // NEA 24-hr PM2.5 bands (µg/m³). 🔴 marks 56 and above; keep in sync with update.yml.
     function pm25Band(v) {
       if (v == null) return "n/a";
       if (v <= 55) return "Normal";
@@ -90,7 +90,7 @@
           const tr = document.createElement("tr");
           tr.append(
             cell(name.charAt(0).toUpperCase() + name.slice(1)),
-            cell(pm25[name], "num"), cell(pm25Band(pm25[name])),
+            cell(pm25[name] >= 56 ? `🔴 ${pm25[name]}` : pm25[name], "num"), cell(pm25Band(pm25[name])),
             cell(psi[name], "num"), cell(psiBand(psi[name])),
           );
           return tr;

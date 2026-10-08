@@ -1,0 +1,60 @@
+name: Update preview
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bake latest readings into OpenGraph tags
+        run: |
+          curl -sf https://api-open.data.gov.sg/v2/real-time/api/psi -o psi.json
+          updated=$(jq -r '.data.items[0].updatedTimestamp' psi.json)
+          time=$(TZ=Asia/Singapore date -d "$updated" '+%-d %b, %-I:%M %p')
+
+          # NEA 24-hr PM2.5 bands (µg/m³). Keep in sync with index.html.
+          jq -r --arg time "$time" '
+            def band: if . == null then "n/a" elif . <= 55 then "Normal" elif . <= 150 then "Elevated"
+                      elif . <= 250 then "High" else "Very high" end;
+            .data.items[0].readings as $r
+            | ($r.pm25_one_hourly // $r.pm25_twenty_four_hourly) as $pm
+            | (if $r.pm25_one_hourly then "1-hr" else "24-hr" end) as $label
+            | ["north", "south", "east", "west", "central"] as $regions
+            | ($regions | map($pm[.]) | max) as $worst
+            | "TITLE=SG PM2.5 \($worst) (\($worst | band)) · \($time)",
+              "DESCRIPTION=\($regions | map("\(.[:1] | ascii_upcase)\(.[1:]) \($pm[.])") | join(" · ")) µg/m³ (\($label)). PSI 24-hr up to \($regions | map($r.psi_twenty_four_hourly[.]) | max)."
+          ' psi.json >> "$GITHUB_ENV"
+
+      - name: Write tags
+        run: |
+          mkdir -p _site
+          perl -pe '
+            s/(<title>)[^<]*/$1$ENV{TITLE}/;
+            s/(<meta (?:property|name)="(?:og:|twitter:)title" content=")[^"]*/$1$ENV{TITLE}/;
+            s/(<meta (?:property|name)="(?:og:|twitter:)?description" content=")[^"]*/$1$ENV{DESCRIPTION}/;
+          ' index.html > _site/index.html
+          grep -E '<title>|og:(title|description)' _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

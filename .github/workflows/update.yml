@@ -41,8 +41,11 @@ jobs:
                 | join(" ")) µg/m³"
           ' haze.json)
           echo "TITLE=$summary" >> "$GITHUB_ENV"
-          # e.g. "As of 10pm on 8 Oct 2026"
-          echo "DESCRIPTION=As of $(jq -r '.ChartAsOfDate' haze.json)" >> "$GITHUB_ENV"
+          # e.g. "As of 10pm on 8 Oct 2026". The value lands in HTML and $GITHUB_ENV unescaped,
+          # so allow only plain characters; anything else fails the job and skips the deploy.
+          asof=$(jq -r '.ChartAsOfDate
+            | if type == "string" and test("\\A[0-9A-Za-z :,]{1,40}\\z") then . else error("unexpected ChartAsOfDate") end' haze.json)
+          echo "DESCRIPTION=As of $asof" >> "$GITHUB_ENV"
 
       - name: Write tags
         run: |
